@@ -146,7 +146,7 @@
     <div id="loginModal">
         <div class="login-card">
             <h2 id="modalTitulo">🐶 AxaBixo - Entrar</h2>
-            <p id="modalSubtitulo">Insira seus dados para acessar o sistema global.</p>
+            <p id="modalSubtitulo">Insira seus dados para acessar o sistema.</p>
             
             <input type="email" id="emailInput" placeholder="Seu e-mail (ex: nome@gmail.com)" required>
             <input type="password" id="senhaInput" placeholder="Sua senha (mínimo 6 caracteres)" required>
@@ -164,12 +164,11 @@
 
     <input type="file" id="cameraInput" accept="image/*" capture="environment">
 
-    <!-- Firebase SDK (Módulos JS) -->
+    <!-- Script Sem Função de Exclusão -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, onSnapshot, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        // Configuração do Banco de Dados Compartilhado do Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyBPB-_uvxiDJikUfpYI436Esl3Vr50lUEo",
             authDomain: "axabixo-8270a.firebaseapp.com",
@@ -179,12 +178,17 @@
             appId: "1:998492020083:web:280437cf3b4710d141790"
         };
 
-        // Inicializa o Firebase
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const colecaoMarcadores = collection(db, "marcadores");
+        let db = null;
+        let colecaoMarcadores = null;
 
-        // Elementos da Interface
+        try {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            colecaoMarcadores = collection(db, "marcadores");
+        } catch (e) {
+            console.warn("Erro ao iniciar Firebase:", e);
+        }
+
         const status = document.querySelector('.status');
         const botaoAxaBixo = document.querySelector('.axabixo');
         const cameraInput = document.querySelector('#cameraInput');
@@ -262,97 +266,71 @@
             }
         });
 
-        // 1. Inicializar Mapa Interativo
+        // 1. Inicializar Mapa
         function inicializarMapa() {
             mapa = L.map('mapa').setView([-14.2350, -51.9253], 4);
 
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
                 maxZoom: 19,
-                attribution: '© OpenStreetMap / AxaBixo'
+                attribution: '© OpenStreetMap contributors & CARTO'
             }).addTo(mapa);
 
-            escutarMarcadoresEmTempoReal();
+            carregarESincronizarDados();
         }
 
         inicializarMapa();
 
-        // 2. Escutar alterações no banco de dados na nuvem em Tempo Real
-        function escutarMarcadoresEmTempoReal() {
-            onSnapshot(colecaoMarcadores, (snapshot) => {
-                snapshot.docChanges().forEach((change) => {
-                    const data = change.doc.data();
-                    const id = change.doc.id;
+        // 2. Carrega Dados Locais e da Nuvem
+        async function carregarESincronizarDados() {
+            const locais = JSON.parse(localStorage.getItem('axabixo_todos_marcadores')) || [];
+            locais.forEach(m => desenharMarcadorNoMapa(m.id || m.timestamp, m));
 
-                    if (change.type === "added") {
-                        desenharMarcadorNoMapa(id, data);
-                    }
-                    if (change.type === "removed") {
-                        if (marcadoresAtivosNoMapa[id]) {
-                            mapa.removeLayer(marcadoresAtivosNoMapa[id]);
-                            delete marcadoresAtivosNoMapa[id];
+            if (db && colecaoMarcadores) {
+                try {
+                    const snapshotNuvem = await getDocs(colecaoMarcadores);
+                    snapshotNuvem.forEach(docSnap => {
+                        desenharMarcadorNoMapa(docSnap.id, docSnap.data());
+                    });
+                } catch (e) {
+                    console.warn("Aviso ao carregar nuvem:", e);
+                }
+
+                onSnapshot(colecaoMarcadores, (snapshot) => {
+                    snapshot.docChanges().forEach((change) => {
+                        const data = change.doc.data();
+                        const id = change.doc.id;
+
+                        if (change.type === "added") {
+                            desenharMarcadorNoMapa(id, data);
                         }
-                    }
+                    });
                 });
-            }, (erro) => {
-                console.warn("Usando sincronização local estendida:", erro);
-                carregarMarcadoresLocais();
-            });
+            }
         }
 
-        function carregarMarcadoresLocais() {
-            const salvis = JSON.parse(localStorage.getItem('axabixo_nuvem_backup')) || [];
-            salvis.forEach(m => desenharMarcadorNoMapa(m.id, m));
-        }
-
-        // 3. Desenhar Marcador no Mapa do usuário
+        // 3. Desenhar Marcador (Sem botão de deletar)
         function desenharMarcadorNoMapa(id, m) {
-            if (!mapa || marcadoresAtivosNoMapa[id]) return;
+            const chaveMapa = id || m.timestamp;
+            if (!mapa || marcadoresAtivosNoMapa[chaveMapa]) return;
 
             const marcador = L.marker([m.lat, m.lng]).addTo(mapa);
-            marcadoresAtivosNoMapa[id] = marcador;
-
-            let botaoDeletarHTML = '';
-            if (usuarioLogado === m.criador) {
-                botaoDeletarHTML = `<br><button onclick="window.deletarMarcadorNuvem('${id}', '${m.criador}')" style="background-color: #d9534f; color: white; border: none; padding: 6px 12px; border-radius: 5px; cursor: pointer; margin-top: 8px; width: 100%;">🗑️ Remover meu marcador</button>`;
-            } else {
-                botaoDeletarHTML = `<br><small style="color: #888; display: block; margin-top: 5px;">Postado por: ${m.criador}</small>`;
-            }
+            marcadoresAtivosNoMapa[chaveMapa] = marcador;
 
             marcador.bindPopup(`
                 <div style="font-size: 13px; max-width: 220px; text-align: center;">
-                    <strong style="color: #ff5722; font-size: 14px;">🐶 AxaBixo Global</strong><br><br>
+                    <strong style="color: #ff5722; font-size: 14px;">🐶 AxaBixo</strong><br><br>
                     <img src="${m.imagemUrl}" style="width: 100%; height: 130px; object-fit: cover; border-radius: 8px; margin-bottom: 6px;"><br>
                     <div style="text-align: left;">
                         <b>Descrição:</b> ${m.descricao}<br>
                         <b>📍 Endereço:</b> ${m.endereco}<br>
                         <small style="color: #666;"><b>Data:</b> ${m.data}</small>
                     </div>
-                    ${botaoDeletarHTML}
+                    <br><small style="color: #888; display: block; margin-top: 5px;">Postado por: ${m.criador}</small>
                 </div>
             `);
         }
 
-        // 4. Deletar Marcador Globalmente
-        window.deletarMarcadorNuvem = async function(id, criador) {
-            if (usuarioLogado !== criador) {
-                alert("Apenas o criador deste marcador pode removê-lo!");
-                return;
-            }
-
-            if (!confirm("Tem certeza que deseja remover este marcador para todos os usuários?")) return;
-
-            try {
-                await deleteDoc(doc(db, "marcadores", id));
-                alert("Marcador removido com sucesso!");
-            } catch (e) {
-                let backup = JSON.parse(localStorage.getItem('axabixo_nuvem_backup')) || [];
-                backup = backup.filter(m => m.id !== id);
-                localStorage.setItem('axabixo_nuvem_backup', JSON.stringify(backup));
-                location.reload();
-            }
-        };
-
-        // 5. Geolocalização
+        // 4. Geolocalização
         const acharLocalizacao = () => {
             status.textContent = 'Buscando sua localização...';
 
@@ -391,7 +369,7 @@
 
         acharLocalizacao();
 
-        // 6. Buscar Endereço (Rua e Bairro)
+        // 5. Buscar Endereço
         async function buscarEndereco(lat, lng) {
             try {
                 status.textContent = 'Buscando endereço...';
@@ -413,7 +391,7 @@
             }
         }
 
-        // 7. Ação do Botão AxaBixo
+        // 6. Botão AxaBixo
         botaoAxaBixo.addEventListener('click', () => {
             if (!usuarioLogado) {
                 alert('Você precisa fazer login com sua conta primeiro.');
@@ -429,7 +407,45 @@
             cameraInput.click();
         });
 
-        // 8. Salvar Novo Marcador no Banco de Dados
+        // 7. Compressão de Imagem Otimizada
+        function comprimirImagem(file, callback) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    const MAX_WIDTH = 300;
+                    const MAX_HEIGHT = 300;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > MAX_WIDTH) {
+                            height *= MAX_WIDTH / width;
+                            width = MAX_WIDTH;
+                        }
+                    } else {
+                        if (height > MAX_HEIGHT) {
+                            width *= MAX_HEIGHT / height;
+                            height = MAX_HEIGHT;
+                        }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.3);
+                    callback(dataUrl);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // 8. Salvamento Definitivo
         cameraInput.addEventListener('change', (event) => {
             const arquivo = event.target.files[0];
             if (!arquivo) return;
@@ -437,41 +453,49 @@
             let descricao = prompt("Descreva o animal de rua que você viu:");
             if (!descricao) descricao = "Animal de rua visto recentemente.";
 
-            const reader = new FileReader();
-            
-            reader.onload = async function(e) {
-                const imagemUrl = e.target.result;
+            status.textContent = 'Processando foto...';
+
+            comprimirImagem(arquivo, async function(imagemComprimidaUrl) {
                 const endereco = await buscarEndereco(latitudeUsuario, longitudeUsuario);
+                const timestampUnico = Date.now();
 
                 const novoMarcadorObj = {
+                    id: 'local_' + timestampUnico,
                     lat: latitudeUsuario,
                     lng: longitudeUsuario,
                     descricao: descricao,
                     endereco: endereco,
-                    imagemUrl: imagemUrl,
+                    imagemUrl: imagemComprimidaUrl,
                     criador: usuarioLogado,
                     data: new Date().toLocaleDateString(),
-                    timestamp: Date.now()
+                    timestamp: timestampUnico
                 };
 
+                // 1. Salva localmente
                 try {
-                    // Envia para o Firebase (Sincroniza com todos os outros aparelhos)
-                    await addDoc(colecaoMarcadores, novoMarcadorObj);
-                    alert('Marcador registrado globalmente com sucesso!');
-                } catch (erroNuvem) {
-                    // Backup em caso de erro
-                    let backup = JSON.parse(localStorage.getItem('axabixo_nuvem_backup')) || [];
-                    novoMarcadorObj.id = 'temp_' + Date.now();
-                    backup.push(novoMarcadorObj);
-                    localStorage.setItem('axabixo_nuvem_backup', JSON.stringify(backup));
-                    desenharMarcadorNoMapa(novoMarcadorObj.id, novoMarcadorObj);
-                    alert('Marcador registrado localmente!');
+                    let salvos = JSON.parse(localStorage.getItem('axabixo_todos_marcadores')) || [];
+                    salvos.push(novoMarcadorObj);
+                    localStorage.setItem('axabixo_todos_marcadores', JSON.stringify(salvos));
+                    desenharMarcadorNoMapa(timestampUnico, novoMarcadorObj);
+                } catch (err) {
+                    console.warn("Erro ao salvar localmente:", err);
+                }
+
+                // 2. Envia para o Firebase
+                if (db && colecaoMarcadores) {
+                    try {
+                        await addDoc(colecaoMarcadores, novoMarcadorObj);
+                        status.textContent = 'Publicado com sucesso!';
+                        setTimeout(() => { status.textContent = ''; }, 3000);
+                    } catch (erroNuvem) {
+                        console.error("Erro na nuvem:", erroNuvem);
+                        status.textContent = 'Salvo no aparelho.';
+                        setTimeout(() => { status.textContent = ''; }, 3000);
+                    }
                 }
 
                 cameraInput.value = '';
-            };
-
-            reader.readAsDataURL(arquivo);
+            });
         });
     </script>
 </body>
