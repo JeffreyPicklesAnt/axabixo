@@ -164,10 +164,10 @@
 
     <input type="file" id="cameraInput" accept="image/*" capture="environment">
 
-    <!-- Script Corrigido com OpenStreetMap Gratuito -->
+    <!-- Script Completo com Deleção Restrita ao Criador -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, collection, addDoc, onSnapshot, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, onSnapshot, getDocs, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyBPB-_uvxiDJikUfpYI436Esl3Vr50lUEo",
@@ -266,7 +266,7 @@
             }
         });
 
-        // 1. Inicializar Mapa com OpenStreetMap Padrão (Sem exigência de API Key)
+        // 1. Inicializar Mapa com OpenStreetMap
         function inicializarMapa() {
             mapa = L.map('mapa').setView([-14.2350, -51.9253], 4);
 
@@ -303,18 +303,31 @@
                         if (change.type === "added") {
                             desenharMarcadorNoMapa(id, data);
                         }
+                        if (change.type === "removed") {
+                            if (marcadoresAtivosNoMapa[id]) {
+                                mapa.removeLayer(marcadoresAtivosNoMapa[id]);
+                                delete marcadoresAtivosNoMapa[id];
+                            }
+                        }
                     });
                 });
             }
         }
 
-        // 3. Desenhar Marcador
+        // 3. Desenhar Marcador com Restrição de Deleção para o Criador
         function desenharMarcadorNoMapa(id, m) {
             const chaveMapa = id || m.timestamp;
             if (!mapa || marcadoresAtivosNoMapa[chaveMapa]) return;
 
             const marcador = L.marker([m.lat, m.lng]).addTo(mapa);
             marcadoresAtivosNoMapa[chaveMapa] = marcador;
+
+            let botaoDeletarHTML = '';
+            if (usuarioLogado === m.criador) {
+                botaoDeletarHTML = `<br><button onclick="window.deletarMarcador('${id}', '${m.criador}', ${m.timestamp || 0})" style="background-color: #d9534f; color: white; border: none; padding: 6px 12px; border-radius: 5px; cursor: pointer; margin-top: 8px; width: 100%;">🗑️ Remover meu marcador</button>`;
+            } else {
+                botaoDeletarHTML = `<br><small style="color: #888; display: block; margin-top: 5px;">Postado por: ${m.criador}</small>`;
+            }
 
             marcador.bindPopup(`
                 <div style="font-size: 13px; max-width: 220px; text-align: center;">
@@ -325,12 +338,40 @@
                         <b>📍 Endereço:</b> ${m.endereco}<br>
                         <small style="color: #666;"><b>Data:</b> ${m.data}</small>
                     </div>
-                    <br><small style="color: #888; display: block; margin-top: 5px;">Postado por: ${m.criador}</small>
+                    ${botaoDeletarHTML}
                 </div>
             `);
         }
 
-        // 4. Geolocalização
+        // 4. Deletar Marcador (Exclusivo para o Autor)
+        window.deletarMarcador = async function(id, criador, timestamp) {
+            if (usuarioLogado !== criador) {
+                alert("Apenas o criador deste marcador pode removê-lo!");
+                return;
+            }
+
+            if (!confirm("Tem certeza que deseja remover este marcador?")) return;
+
+            if (db && id && !id.toString().startsWith('local_')) {
+                try {
+                    await deleteDoc(doc(db, "marcadores", id));
+                } catch (e) {
+                    console.error("Erro ao deletar do Firebase", e);
+                }
+            }
+
+            let salvos = JSON.parse(localStorage.getItem('axabixo_todos_marcadores')) || [];
+            if (timestamp) {
+                salvos = salvos.filter(m => m.timestamp !== timestamp);
+            } else {
+                salvos = salvos.filter(m => m.id !== id);
+            }
+            localStorage.setItem('axabixo_todos_marcadores', JSON.stringify(salvos));
+            alert("Marcador removido com sucesso!");
+            location.reload();
+        };
+
+        // 5. Geolocalização
         const acharLocalizacao = () => {
             status.textContent = 'Buscando sua localização...';
 
@@ -369,7 +410,7 @@
 
         acharLocalizacao();
 
-        // 5. Buscar Endereço
+        // 6. Buscar Endereço
         async function buscarEndereco(lat, lng) {
             try {
                 status.textContent = 'Buscando endereço...';
@@ -391,7 +432,7 @@
             }
         }
 
-        // 6. Botão AxaBixo
+        // 7. Botão AxaBixo
         botaoAxaBixo.addEventListener('click', () => {
             if (!usuarioLogado) {
                 alert('Você precisa fazer login com sua conta primeiro.');
@@ -407,7 +448,7 @@
             cameraInput.click();
         });
 
-        // 7. Compressão de Imagem Otimizada
+        // 8. Compressão de Imagem Otimizada
         function comprimirImagem(file, callback) {
             const reader = new FileReader();
             reader.onload = function(e) {
@@ -445,7 +486,7 @@
             reader.readAsDataURL(file);
         }
 
-        // 8. Salvamento Definitivo
+        // 9. Salvamento Definitivo
         cameraInput.addEventListener('change', (event) => {
             const arquivo = event.target.files[0];
             if (!arquivo) return;
