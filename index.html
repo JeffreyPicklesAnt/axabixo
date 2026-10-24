@@ -164,7 +164,7 @@
 
     <input type="file" id="cameraInput" accept="image/*" capture="environment">
 
-    <!-- Script Sem Função de Exclusão -->
+    <!-- Script Corrigido com OpenStreetMap Gratuito -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getFirestore, collection, addDoc, onSnapshot, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
@@ -266,13 +266,13 @@
             }
         });
 
-        // 1. Inicializar Mapa
+        // 1. Inicializar Mapa com OpenStreetMap Padrão (Sem exigência de API Key)
         function inicializarMapa() {
             mapa = L.map('mapa').setView([-14.2350, -51.9253], 4);
 
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
-                attribution: '© OpenStreetMap contributors & CARTO'
+                attribution: '&copy; OpenStreetMap contributors'
             }).addTo(mapa);
 
             carregarESincronizarDados();
@@ -308,7 +308,7 @@
             }
         }
 
-        // 3. Desenhar Marcador (Sem botão de deletar)
+        // 3. Desenhar Marcador
         function desenharMarcadorNoMapa(id, m) {
             const chaveMapa = id || m.timestamp;
             if (!mapa || marcadoresAtivosNoMapa[chaveMapa]) return;
