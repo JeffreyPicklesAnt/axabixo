@@ -1,848 +1,586 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AxaBixo - Resgate de Animais</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AxaBixo - Resgate & Comunidades</title>
+  
+  <!-- CSS do Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body, html {
+      width: 100%;
+      height: 100%;
+      font-family: Arial, sans-serif;
+      overflow: hidden;
+    }
+    #mapa {
+      width: 100vw;
+      height: 100vh;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+    .status {
+      position: fixed;
+      top: 15px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255, 255, 255, 0.95);
+      padding: 10px 18px;
+      border-radius: 20px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      z-index: 1000;
+      font-size: 14px;
+      text-align: center;
+      max-width: 90%;
+    }
+    
+    /* Container dos botões flutuantes inferiores */
+    .botoes-container {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      display: flex;
+      gap: 15px;
+      width: 90%;
+      max-width: 500px;
+      justify-content: center;
+    }
+    .btn-flutuante {
+      color: white;
+      border: none;
+      padding: 16px 24px;
+      font-size: 16px;
+      font-weight: bold;
+      border-radius: 30px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+      justify-content: center;
+    }
+    .axabixo { background-color: #ff5722; }
+    .axabixo:active { background-color: #e64a19; }
+    .comunidade-btn { background-color: #4CAF50; }
+    .comunidade-btn:active { background-color: #388E3C; }
 
-    <!-- CSS do Leaflet -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    #cameraInput { display: none; }
 
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body, html {
-            width: 100%;
-            height: 100%;
-            font-family: Arial, sans-serif;
-            overflow: hidden;
-            background-color: #f5f5f5;
-        }
+    /* Modal de Login */
+    #loginModal {
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex; justify-content: center; align-items: center;
+      z-index: 9999;
+    }
+    .login-card {
+      background: white; padding: 30px; border-radius: 15px;
+      width: 90%; max-width: 360px; text-align: center;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    }
+    .login-card h2 { margin-bottom: 10px; color: #ff5722; }
+    .login-card p { margin-bottom: 20px; font-size: 13px; color: #555; }
+    .login-card input {
+      width: 100%; padding: 12px; margin-bottom: 12px;
+      border: 1px solid #ccc; border-radius: 8px; font-size: 14px;
+    }
+    .login-card button {
+      width: 100%; padding: 12px; background-color: #ff5722; color: white;
+      border: none; border-radius: 8px; font-size: 16px; font-weight: bold;
+      cursor: pointer; margin-top: 5px;
+    }
+    .toggle-btn {
+      background: none !important; color: #007BFF !important; border: none;
+      font-size: 13px !important; margin-top: 15px !important;
+      cursor: pointer; text-decoration: underline;
+    }
 
-        #mapa {
-            width: 100vw;
-            height: 100vh;
-            position: absolute;
-            top: 0;
-            left: 0;
-            z-index: 1;
-        }
+    /* Painel Lateral da Comunidade (Gaveta) */
+    #painelComunidade {
+      position: fixed;
+      top: 0;
+      right: -100%; /* Começa escondido à direita */
+      width: 100vw;
+      max-width: 400px;
+      height: 100vh;
+      background: #f9f9f9;
+      z-index: 2000;
+      box-shadow: -4px 0 15px rgba(0,0,0,0.2);
+      transition: right 0.3s ease;
+      display: flex;
+      flex-direction: column;
+    }
+    #painelComunidade.aberto {
+      right: 0;
+    }
+    .comunidade-header {
+      background: #4CAF50;
+      color: white;
+      padding: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .btn-fechar {
+      background: none;
+      border: none;
+      color: white;
+      font-size: 24px;
+      cursor: pointer;
+    }
+    .comunidade-corpo {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+    }
+    
+    /* Formulário de Novo Passeio */
+    .form-passeio {
+      background: white;
+      padding: 15px;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    .form-passeio h4 { color: #333; margin-bottom: 10px; }
+    .form-passeio input, .form-passeio textarea {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 10px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    .form-passeio button {
+      width: 100%;
+      padding: 10px;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-weight: bold;
+      cursor: pointer;
+    }
 
-        .status {
-            position: fixed;
-            top: 15px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(255, 255, 255, 0.95);
-            padding: 10px 18px;
-            border-radius: 20px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-            z-index: 1000;
-            font-size: 14px;
-            text-align: center;
-            max-width: 90%;
-        }
-
-        .axabixo {
-            position: fixed;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            background-color: #ff5722;
-            color: white;
-            border: none;
-            padding: 16px 32px;
-            font-size: 18px;
-            font-weight: bold;
-            border-radius: 30px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-            cursor: pointer;
-            z-index: 1000;
-        }
-
-        .axabixo:active {
-            background-color: #e64a19;
-        }
-
-        #cameraInput {
-            display: none;
-        }
-
-        #loginModal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: rgba(0, 0, 0, 0.7);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-        }
-
-        .login-card {
-            background: white;
-            padding: 25px;
-            border-radius: 15px;
-            width: 90%;
-            max-width: 360px;
-            text-align: center;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-
-        .login-card h2 {
-            margin-bottom: 8px;
-            color: #ff5722;
-        }
-
-        .login-card p {
-            margin-bottom: 15px;
-            font-size: 13px;
-            color: #555;
-        }
-
-        .login-card input, .login-card textarea {
-            width: 100%;
-            padding: 10px;
-            margin-bottom: 10px;
-            border: 1px solid #ccc;
-            border-radius: 8px;
-            font-size: 14px;
-        }
-
-        .login-card textarea {
-            resize: none;
-            height: 60px;
-        }
-
-        .file-label {
-            display: block;
-            background: #f1f1f1;
-            padding: 8px;
-            border-radius: 8px;
-            border: 1px dashed #ccc;
-            font-size: 13px;
-            color: #555;
-            margin-bottom: 10px;
-            cursor: pointer;
-        }
-
-        .login-card button {
-            width: 100%;
-            padding: 12px;
-            background-color: #ff5722;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            margin-top: 5px;
-        }
-
-        .toggle-btn {
-            background: none !important;
-            color: #007BFF !important;
-            border: none;
-            font-size: 13px !important;
-            margin-top: 15px !important;
-            cursor: pointer;
-            text-decoration: underline;
-        }
-
-        /* Modal para Visualização de Foto Ampliada com Zoom e Arraste */
-        #imageModal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: rgba(0, 0, 0, 0.95);
-            display: none;
-            justify-content: center;
-            align-items: center;
-            z-index: 10000;
-            overflow: hidden;
-            touch-action: none;
-        }
-
-        #imageModal img {
-            max-width: 90%;
-            max-height: 90%;
-            object-fit: contain;
-            border-radius: 8px;
-            transition: transform 0.1s ease-out;
-            cursor: grab;
-            transform-origin: center center;
-        }
-
-        #imageModal img:active {
-            cursor: grabbing;
-        }
-
-        .avatar-google {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            color: white;
-            font-weight: bold;
-            font-size: 14px;
-            vertical-align: middle;
-            margin-right: 5px;
-        }
-
-        .avatar-img {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            object-fit: cover;
-            vertical-align: middle;
-            margin-right: 5px;
-        }
-    </style>
-
-    <!-- JS do Leaflet com carregamento assíncrono seguro -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    /* Listagem de Cards de Passeio */
+    .lista-passeios h4 { margin-bottom: 10px; color: #555; }
+    .card-passeio {
+      background: white;
+      padding: 15px;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      margin-bottom: 12px;
+      border-left: 5px solid #4CAF50;
+    }
+    .card-passeio h5 { font-size: 16px; color: #222; margin-bottom: 5px; }
+    .card-passeio p { font-size: 13px; color: #666; margin-bottom: 8px; }
+    .info-tempo {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      font-weight: bold;
+      color: #4CAF50;
+      background: #e8f5e9;
+      padding: 6px 10px;
+      border-radius: 4px;
+    }
+    .btn-deletar-passeio {
+      background: #ff5722;
+      color: white;
+      border: none;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+  </style>
 </head>
 <body>
 
-    <!-- Modal de Login / Cadastro -->
-    <div id="loginModal">
-        <div class="login-card">
-            <h2 id="modalTitulo">🐶 AxaBixo - Entrar</h2>
-            <p id="modalSubtitulo">Insira seus dados para acessar o sistema.</p>
-            
-            <input type="email" id="emailInput" placeholder="Seu e-mail (ex: nome@gmail.com)" required>
-            <input type="password" id="senhaInput" placeholder="Sua senha (mínimo 6 caracteres)" required>
-            
-            <div id="camposCadastro" style="display: none;">
-                <input type="text" id="nomeUsuarioInput" placeholder="Nome de usuário (ex: Lucas Silva)">
-                <textarea id="descricaoPerfilInput" placeholder="Fale sobre você e seu pet..."></textarea>
-                <label class="file-label" for="fotoPerfilInput">📷 Escolher Foto de Perfil (Opcional)</label>
-                <input type="file" id="fotoPerfilInput" accept="image/*" style="display: none;">
-            </div>
+  <!-- Modal de Login -->
+  <div id="loginModal">
+    <div class="login-card">
+      <h2 id="modalTitulo">🐶 AxaBixo - Entrar</h2>
+      <p id="modalSubtitulo">Insira seus dados para acessar o sistema.</p>
+      <input type="email" id="emailInput" placeholder="Seu e-mail (ex: nome@gmail.com)" required>
+      <input type="password" id="senhaInput" placeholder="Sua senha (mínimo 6 caracteres)" required>
+      <button id="btnAcao">Entrar</button>
+      <button class="toggle-btn" id="btnAlternar">Não tem uma conta? Crie uma agora</button>
+    </div>
+  </div>
 
-            <button id="btnAcao" type="button">Entrar</button>
-            <button class="toggle-btn" id="btnAlternar" type="button">Não tem uma conta? Crie uma agora</button>
+  <h1 class="status">Aguardando localização...</h1>
+  <div id="mapa"></div>
+
+  <!-- Botões Inferiores Unificados -->
+  <div class="botoes-container">
+    <button class="btn-flutuante axabixo">📸 Axa Bixo</button>
+    <button class="btn-flutuante comunidade-btn" id="btnAbrirComunidade">👥 Passeios</button>
+  </div>
+  
+  <input type="file" id="cameraInput" accept="image/*" capture="environment">
+
+  <!-- Painel Lateral de Comunidades (Abas de Passeios Coletivos) -->
+  <div id="painelComunidade">
+    <div class="comunidade-header">
+      <h3>👥 Grupos de Passeio</h3>
+      <button class="btn-fechar" id="btnFecharComunidade">×</button>
+    </div>
+    <div class="comunidade-corpo">
+      
+      <!-- Criar Novo Grupo de Passeio -->
+      <div class="form-passeio">
+        <h4>Agendar Novo Passeio</h4>
+        <input type="text" id="nomeGrupoInput" placeholder="Nome do grupo (ex: Poodles do Centro)" required>
+        <input type="text" id="pontoEncontroInput" placeholder="📍 Ponto de encontro e referência" required>
+        <input type="date" id="dataPasseioInput" required>
+        <input type="time" id="horaPasseioInput" required>
+        <textarea id="descPasseioInput" placeholder="Recados ou descrição do trajeto..." rows="2"></textarea>
+        <button id="btnCriarPasseio">Agendar Encontro</button>
+      </div>
+
+      <!-- Lista de Eventos Ativos -->
+      <div class="lista-passeios">
+        <h4>Passeios Agendados</h4>
+        <div id="containerCardsPasseio">
+          <!-- Cards injetados via JS dinamicamente -->
         </div>
+      </div>
+
     </div>
-
-    <!-- Modal de Foto Ampliada com Zoom e Arraste -->
-    <div id="imageModal">
-        <img id="imgAmpliada" alt="Foto Ampliada">
-    </div>
-
-    <h1 class="status">Aguardando localização...</h1>
-
-    <div id="mapa"></div>
-
-    <button class="axabixo" type="button">Axa Bixo</button>
-
-    <input type="file" id="cameraInput" accept="image/*" capture="environment">
-
-    <!-- Script Robusto e Blindado contra falhas de rede -->
-    <script type="module">
-        const status = document.querySelector('.status');
-        const botaoAxaBixo = document.querySelector('.axabixo');
-        const cameraInput = document.querySelector('#cameraInput');
-        const loginModal = document.querySelector('#loginModal');
-        const emailInput = document.querySelector('#emailInput');
-        const senhaInput = document.querySelector('#senhaInput');
-        const camposCadastro = document.querySelector('#camposCadastro');
-        const nomeUsuarioInput = document.querySelector('#nomeUsuarioInput');
-        const descricaoPerfilInput = document.querySelector('#descricaoPerfilInput');
-        const fotoPerfilInput = document.querySelector('#fotoPerfilInput');
-        const btnAcao = document.querySelector('#btnAcao');
-        const btnAlternar = document.querySelector('#btnAlternar');
-        const modalTitulo = document.querySelector('#modalTitulo');
-        const modalSubtitulo = document.querySelector('#modalSubtitulo');
-        const imageModal = document.querySelector('#imageModal');
-        const imgAmpliada = document.querySelector('#imgAmpliada');
-
-        let usuarioLogadoEmail = localStorage.getItem('axabixo_usuario_logado');
-        let modoCadastro = false;
-        let fotoPerfilBase64Temp = null;
-        let latitudeUsuario = null;
-        let longitudeUsuario = null;
-        let mapa = null;
-        let marcadoresAtivosNoMapa = {};
-        let db = null;
-        let colecaoMarcadores = null;
-
-        if (usuarioLogadoEmail && loginModal) {
-            loginModal.style.display = 'none';
-        }
-
-        function obterContas() {
-            try {
-                return JSON.parse(localStorage.getItem('axabixo_contas')) || [];
-            } catch (e) {
-                return [];
-            }
-        }
-
-        function obterMarcadoresLocais() {
-            try {
-                return JSON.parse(localStorage.getItem('axabixo_todos_marcadores')) || [];
-            } catch (e) {
-                return [];
-            }
-        }
-
-        if (fotoPerfilInput) {
-            fotoPerfilInput.addEventListener('change', (e) => {
-                const arquivo = e.target.files[0];
-                if (!arquivo) return;
-                const reader = new FileReader();
-                reader.onload = function(evt) {
-                    const img = new Image();
-                    img.onload = function() {
-                        const canvas = document.createElement('canvas');
-                        const ctx = canvas.getContext('2d');
-                        const MAX = 150;
-                        let w = img.width, h = img.height;
-                        if (w > h) { if (w > MAX) { h *= MAX / w; w = MAX; } }
-                        else { if (h > MAX) { w *= MAX / h; h = MAX; } }
-                        canvas.width = w; canvas.height = h;
-                        ctx.drawImage(img, 0, 0, w, h);
-                        fotoPerfilBase64Temp = canvas.toDataURL('image/jpeg', 0.5);
-                    };
-                    img.src = evt.target.result;
-                };
-                reader.readAsDataURL(arquivo);
-            });
-        }
-
-        function gerarCorAvatar(str) {
-            if (!str) str = "user";
-            let hash = 0;
-            for (let i = 0; i < str.length; i++) {
-                hash = str.charCodeAt(i) + ((hash << 5) - hash);
-            }
-            const cores = ['#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#009688', '#4caf50', '#ff9800', '#795548'];
-            return cores[Math.abs(hash) % cores.length];
-        }
-
-        function renderizarPerfilHtml(email) {
-            if (!email) email = "desconhecido@axabixo.com";
-            let contas = obterContas();
-            let conta = contas.find(c => c.email === email);
-            let nomeExibicao = conta && conta.nome ? conta.nome : email.split('@')[0];
-            let descExibicao = conta && conta.descricao ? conta.descricao : 'Resgatador(a) de animais';
-
-            if (conta && conta.fotoPerfil) {
-                return `<span style="display:inline-flex; align-items:center; gap:6px;"><img src="${conta.fotoPerfil}" class="avatar-img"> <b>${nomeExibicao}</b></span><br><small style="color:#555;">${descExibicao}</small>`;
-            } else {
-                let primeiraLetra = nomeExibicao.charAt(0).toUpperCase();
-                let corFundo = gerarCorAvatar(email);
-                return `<span style="display:inline-flex; align-items:center; gap:6px;"><span class="avatar-google" style="background-color: ${corFundo};">${primeiraLetra}</span> <b>${nomeExibicao}</b></span><br><small style="color:#555;">${descExibicao}</small>`;
-            }
-        }
-
-        if (btnAlternar) {
-            btnAlternar.addEventListener('click', (e) => {
-                e.preventDefault();
-                modoCadastro = !modoCadastro;
-                if (modoCadastro) {
-                    modalTitulo.textContent = '🐶 AxaBixo - Criar Conta';
-                    modalSubtitulo.textContent = 'Crie seu perfil de resgatador.';
-                    btnAcao.textContent = 'Cadastrar Conta';
-                    btnAlternar.textContent = 'Já tem uma conta? Faça login';
-                    camposCadastro.style.display = 'block';
-                } else {
-                    modalTitulo.textContent = '🐶 AxaBixo - Entrar';
-                    modalSubtitulo.textContent = 'Insira seus dados para acessar o sistema.';
-                    btnAcao.textContent = 'Entrar';
-                    btnAlternar.textContent = 'Não tem uma conta? Crie uma agora';
-                    camposCadastro.style.display = 'none';
-                }
-            });
-        }
-
-        function validarEmail(email) {
-            return /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email);
-        }
-
-        if (btnAcao) {
-            btnAcao.addEventListener('click', (e) => {
-                e.preventDefault();
-                const email = emailInput.value.trim().toLowerCase();
-                const senha = senhaInput.value.trim();
-
-                if (!email || !senha) {
-                    alert('Por favor, preencha o e-mail e a senha.');
-                    return;
-                }
-
-                if (!validarEmail(email)) {
-                    alert('Por favor, digite um e-mail válido (ex: usuario@gmail.com).');
-                    return;
-                }
-
-                if (senha.length < 6) {
-                    alert('A senha deve ter pelo menos 6 caracteres.');
-                    return;
-                }
-
-                let contas = obterContas();
-
-                if (modoCadastro) {
-                    const emailExistente = contas.find(c => c.email === email);
-                    if (emailExistente) {
-                        alert('Este e-mail já está cadastrado! Faça login com sua senha.');
-                        return;
-                    }
-
-                    const nomeUsuario = nomeUsuarioInput.value.trim() || email.split('@')[0];
-                    const descricaoPerfil = descricaoPerfilInput.value.trim() || 'Amante dos animais de rua';
-
-                    contas.push({
-                        email: email,
-                        senha: senha,
-                        nome: nomeUsuario,
-                        descricao: descricaoPerfil,
-                        fotoPerfil: fotoPerfilBase64Temp || null
-                    });
-
-                    localStorage.setItem('axabixo_contas', JSON.stringify(contas));
-                    alert('Conta criada com sucesso! Faça login para continuar.');
-                    
-                    modoCadastro = false;
-                    modalTitulo.textContent = '🐶 AxaBixo - Entrar';
-                    modalSubtitulo.textContent = 'Insira seus dados para acessar o sistema.';
-                    btnAcao.textContent = 'Entrar';
-                    btnAlternar.textContent = 'Não tem uma conta? Crie uma agora';
-                    camposCadastro.style.display = 'none';
-                    senhaInput.value = '';
-                    fotoPerfilBase64Temp = null;
-                } else {
-                    let contaEncontrada = contas.find(c => c.email === email);
-
-                    if (!contaEncontrada && contas.length === 0) {
-                        contaEncontrada = { email: email, senha: senha, nome: email.split('@')[0], descricao: 'Resgatador' };
-                        contas.push(contaEncontrada);
-                        localStorage.setItem('axabixo_contas', JSON.stringify(contas));
-                    }
-
-                    if (!contaEncontrada) {
-                        alert('Conta não encontrada! Clique em "Crie uma agora" abaixo.');
-                        return;
-                    }
-
-                    if (contaEncontrada.senha !== senha) {
-                        alert('Senha incorreta!');
-                        return;
-                    }
-
-                    usuarioLogadoEmail = email;
-                    localStorage.setItem('axabixo_usuario_logado', usuarioLogadoEmail);
-                    loginModal.style.display = 'none';
-                    alert(`Bem-vindo ao AxaBixo, ${contaEncontrada.nome}!`);
-                    location.reload();
-                }
-            });
-        }
-
-        // Inicialização do Mapa e Firebase em segundo plano (não bloqueia a UI)
-        async function conectarFirebase() {
-            try {
-                const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js");
-                const { getFirestore, collection, onSnapshot, getDocs } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
-                
-                const firebaseConfig = {
-                    apiKey: "AIzaSyBPB-_uvxiDJikUfpYI436Esl3Vr50lUEo",
-                    authDomain: "axabixo-8270a.firebaseapp.com",
-                    projectId: "axabixo-8270a",
-                    storageBucket: "axabixo-8270a.firebasestorage.app",
-                    messagingSenderId: "998492020083",
-                    appId: "1:998492020083:web:280437cf3b4710d141790"
-                };
-
-                const app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                colecaoMarcadores = collection(db, "marcadores");
-
-                const snapshotNuvem = await getDocs(colecaoMarcadores);
-                snapshotNuvem.forEach(docSnap => {
-                    desenharMarcadorNoMapa(docSnap.id, docSnap.data());
-                });
-
-                onSnapshot(colecaoMarcadores, (snapshot) => {
-                    snapshot.docChanges().forEach((change) => {
-                        const data = change.doc.data();
-                        const id = change.doc.id;
-                        if (change.type === "added") {
-                            desenharMarcadorNoMapa(id, data);
-                        }
-                        if (change.type === "removed") {
-                            if (marcadoresAtivosNoMapa[id]) {
-                                mapa.removeLayer(marcadoresAtivosNoMapa[id]);
-                                delete marcadoresAtivosNoMapa[id];
-                            }
-                        }
-                    });
-                });
-            } catch (e) {
-                console.warn("Modo Offline / Sem Firebase:", e);
-            }
-        }
-
-        function inicializarMapa() {
-            try {
-                if (typeof L === 'undefined') {
-                    setTimeout(inicializarMapa, 500); // Aguarda o Leaflet carregar caso esteja lento após limpar cache
-                    return;
-                }
-                mapa = L.map('mapa').setView([-14.2350, -51.9253], 4);
-
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    maxZoom: 19,
-                    attribution: '&copy; OpenStreetMap contributors'
-                }).addTo(mapa);
-
-                const locais = obterMarcadoresLocais();
-                locais.forEach(m => desenharMarcadorNoMapa(m.id || m.timestamp, m));
-
-                conectarFirebase();
-            } catch (err) {
-                console.error("Erro ao carregar mapa:", err);
-            }
-        }
-
-        inicializarMapa();
-
-        function desenharMarcadorNoMapa(id, m) {
-            if (!mapa) return;
-            const chaveMapa = id || m.timestamp;
-            if (marcadoresAtivosNoMapa[chaveMapa]) return;
-
-            const marcador = L.marker([m.lat, m.lng]).addTo(mapa);
-            marcadoresAtivosNoMapa[chaveMapa] = marcador;
-
-            let criadorEmail = m.criador || 'desconhecido@axabixo.com';
-            let botaoDeletarHTML = '';
-            
-            if (usuarioLogadoEmail === criadorEmail) {
-                botaoDeletarHTML = `<br><button onclick="window.deletarMarcador('${id}', '${criadorEmail}', ${m.timestamp || 0})" style="background-color: #d9534f; color: white; border: none; padding: 6px 12px; border-radius: 5px; cursor: pointer; margin-top: 8px; width: 100%;">🗑️ Remover meu marcador</button>`;
-            }
-
-            let perfilCriadorHtml = `<div style="margin-bottom: 6px; border-bottom: 1px solid #eee; padding-bottom: 5px;">Postado por: ${renderizarPerfilHtml(criadorEmail)}</div>`;
-
-            marcador.bindPopup(`
-                <div style="font-size: 13px; max-width: 220px; text-align: center;">
-                    <strong style="color: #ff5722; font-size: 14px;">🐶 AxaBixo</strong><br><br>
-                    ${perfilCriadorHtml}
-                    <img src="${m.imagemUrl}" onclick="window.abrirFotoAmpliada('${m.imagemUrl}')" style="width: 100%; height: 130px; object-fit: cover; border-radius: 8px; margin-bottom: 6px; cursor: pointer;" title="Clique para ampliar a foto"><br>
-                    <div style="text-align: left;">
-                        <b>Descrição:</b> ${m.descricao}<br>
-                        <b>📍 Endereço:</b> ${m.endereco}<br>
-                        <small style="color: #666;"><b>Data:</b> ${m.data}</small>
-                    </div>
-                    ${botaoDeletarHTML}
-                </div>
-            `);
-        }
-
-        window.deletarMarcador = async function(id, criador, timestamp) {
-            if (usuarioLogadoEmail !== criador) {
-                alert("Apenas o criador deste marcador pode removê-lo!");
-                return;
-            }
-
-            if (!confirm("Tem certeza que deseja remover este marcador?")) return;
-
-            if (db && id && !id.toString().startsWith('local_')) {
-                try {
-                    const { deleteDoc, doc } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
-                    await deleteDoc(doc(db, "marcadores", id));
-                } catch (e) {
-                    console.error("Erro ao deletar do Firebase", e);
-                }
-            }
-
-            let salvos = obterMarcadoresLocais();
-            if (timestamp) {
-                salvos = salvos.filter(m => m.timestamp !== timestamp);
-            } else {
-                salvos = salvos.filter(m => m.id !== id);
-            }
-            localStorage.setItem('axabixo_todos_marcadores', JSON.stringify(salvos));
-            alert("Marcador removido com sucesso!");
-            location.reload();
-        };
-
-        const acharLocalizacao = () => {
-            status.textContent = 'Buscando sua localização...';
-
-            const success = (position) => {
-                latitudeUsuario = position.coords.latitude;
-                longitudeUsuario = position.coords.longitude;
-
-                status.textContent = 'Sua localização encontrada!';
-                if (mapa) {
-                    mapa.setView([latitudeUsuario, longitudeUsuario], 16);
-
-                    L.circle([latitudeUsuario, longitudeUsuario], {
-                        color: '#2196F3',
-                        fillColor: '#2196F3',
-                        fillOpacity: 0.3,
-                        radius: 30
-                    }).addTo(mapa);
-                }
-
-                setTimeout(() => { status.textContent = ''; }, 4000);
-            };
-
-            const error = () => {
-                status.textContent = 'GPS desativado. Ative para postar!';
-                setTimeout(() => { status.textContent = ''; }, 5000);
-            };
-
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(success, error, {
-                    enableHighAccuracy: true,
-                    timeout: 10000,
-                    maximumAge: 0
-                });
-            }
-        };
-
-        acharLocalizacao();
-
-        async function buscarEndereco(lat, lng) {
-            try {
-                status.textContent = 'Buscando endereço...';
-                const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`;
-                const resposta = await fetch(url);
-                const dados = await resposta.json();
-                status.textContent = '';
-
-                if (dados && dados.address) {
-                    const rua = dados.address.road || dados.address.pedestrian || 'Rua não identificada';
-                    const bairro = dados.address.suburb || dados.address.neighbourhood || 'Bairro não identificado';
-                    const cidade = dados.address.city || dados.address.town || 'Cidade não identificada';
-                    return `${rua}, ${bairro} - ${cidade}`;
-                }
-                return 'Endereço aproximado não localizado';
-            } catch {
-                status.textContent = '';
-                return 'Endereço aproximado';
-            }
-        }
-
-        if (botaoAxaBixo) {
-            botaoAxaBixo.addEventListener('click', () => {
-                if (!usuarioLogadoEmail) {
-                    alert('Você precisa fazer login com sua conta primeiro.');
-                    loginModal.style.display = 'flex';
-                    return;
-                }
-
-                if (latitudeUsuario === null || longitudeUsuario === null) {
-                    alert('Aguarde o carregamento da sua localização.');
-                    acharLocalizacao();
-                    return;
-                }
-                cameraInput.click();
-            });
-        }
-
-        function comprimirImagem(file, callback) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const img = new Image();
-                img.onload = function() {
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    
-                    const MAX_WIDTH = 300;
-                    const MAX_HEIGHT = 300;
-                    let width = img.width;
-                    let height = img.height;
-
-                    if (width > height) {
-                        if (width > MAX_WIDTH) {
-                            height *= MAX_WIDTH / width;
-                            width = MAX_WIDTH;
-                        }
-                    } else {
-                        if (height > MAX_HEIGHT) {
-                            width *= MAX_HEIGHT / height;
-                            height = MAX_HEIGHT;
-                        }
-                    }
-
-                    canvas.width = width;
-                    canvas.height = height;
-                    ctx.drawImage(img, 0, 0, width, height);
-
-                    const dataUrl = canvas.toDataURL('image/jpeg', 0.3);
-                    callback(dataUrl);
-                };
-                img.src = e.target.result;
-            };
-            reader.readAsDataURL(file);
-        }
-
-        if (cameraInput) {
-            cameraInput.addEventListener('change', (event) => {
-                const arquivo = event.target.files[0];
-                if (!arquivo) return;
-
-                let descricao = prompt("Descreva o animal de rua que você viu:");
-                if (!descricao) descricao = "Animal de rua visto recentemente.";
-
-                status.textContent = 'Processando foto...';
-
-                comprimirImagem(arquivo, async function(imagemComprimidaUrl) {
-                    const endereco = await buscarEndereco(latitudeUsuario, longitudeUsuario);
-                    const timestampUnico = Date.now();
-
-                    const novoMarcadorObj = {
-                        id: 'local_' + timestampUnico,
-                        lat: latitudeUsuario,
-                        lng: longitudeUsuario,
-                        descricao: descricao,
-                        endereco: endereco,
-                        imagemUrl: imagemComprimidaUrl,
-                        criador: usuarioLogadoEmail,
-                        data: new Date().toLocaleDateString(),
-                        timestamp: timestampUnico
-                    };
-
-                    try {
-                        let salvos = obterMarcadoresLocais();
-                        salvos.push(novoMarcadorObj);
-                        localStorage.setItem('axabixo_todos_marcadores', JSON.stringify(salvos));
-                        desenharMarcadorNoMapa(timestampUnico, novoMarcadorObj);
-                    } catch (err) {
-                        console.warn("Erro ao salvar localmente:", err);
-                    }
-
-                    if (db && colecaoMarcadores) {
-                        try {
-                            const { addDoc } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
-                            await addDoc(colecaoMarcadores, novoMarcadorObj);
-                            status.textContent = 'Publicado com sucesso!';
-                            setTimeout(() => { status.textContent = ''; }, 3000);
-                        } catch (erroNuvem) {
-                            console.error("Erro na nuvem:", erroNuvem);
-                            status.textContent = 'Salvo no aparelho.';
-                            setTimeout(() => { status.textContent = ''; }, 4000);
-                        }
-                    }
-
-                    cameraInput.value = '';
-                });
-            });
-        }
-
-        // Lógica de Zoom e Arraste para a Imagem Ampliada (Pop-up)
-        let escalaZoom = 1;
-        let arrastando = false;
-        let posX = 0, posY = 0;
-        let inicioX = 0, inicioY = 0;
-
-        if (imageModal) {
-            imageModal.addEventListener('click', (e) => {
-                if (e.target === imageModal) {
-                    fecharZoom();
-                }
-            });
-        }
-
-        function fecharZoom() {
-            imageModal.style.display = 'none';
-            escalaZoom = 1;
-            posX = 0;
-            posY = 0;
-            imgAmpliada.style.transform = `translate(0px, 0px) scale(1)`;
-        }
-
-        window.abrirFotoAmpliada = function(url) {
-            imgAmpliada.src = url;
-            escalaZoom = 1;
-            posX = 0;
-            posY = 0;
-            imgAmpliada.style.transform = `translate(0px, 0px) scale(1)`;
-            imageModal.style.display = 'flex';
-        };
-
-        if (imageModal) {
-            imageModal.addEventListener('wheel', (e) => {
-                e.preventDefault();
-                if (e.deltaY < 0) {
-                    escalaZoom = Math.min(escalaZoom + 0.2, 4);
-                } else {
-                    escalaZoom = Math.max(escalaZoom - 0.2, 1);
-                }
-                if (escalaZoom === 1) { posX = 0; posY = 0; }
-                imgAmpliada.style.transform = `translate(${posX}px, ${posY}px) scale(${escalaZoom})`;
-            }, { passive: false });
-        }
-
-        if (imgAmpliada) {
-            imgAmpliada.addEventListener('mousedown', (e) => {
-                if (escalaZoom > 1) {
-                    arrastando = true;
-                    inicioX = e.clientX - posX;
-                    inicioY = e.clientY - posY;
-                }
-            });
-        }
-
-        window.addEventListener('mousemove', (e) => {
-            if (!arrastando) return;
-            posX = e.clientX - inicioX;
-            posY = e.clientY - inicioY;
-            imgAmpliada.style.transform = `translate(${posX}px, ${posY}px) scale(${escalaZoom})`;
-        });
-
-        window.addEventListener('mouseup', () => { arrastando = false; });
-
-        let distanciaToqueInicial = 0;
-        if (imageModal) {
-            imageModal.addEventListener('touchstart', (e) => {
-                if (e.touches.length === 2) {
-                    distanciaToqueInicial = Math.hypot(
-                        e.touches[0].clientX - e.touches[1].clientX,
-                        e.touches[0].clientY - e.touches[1].clientY
-                    );
-                } else if (e.touches.length === 1 && escalaZoom > 1) {
-                    arrastando = true;
-                    inicioX = e.touches[0].clientX - posX;
-                    inicioY = e.touches[0].clientY - posY;
-                }
-            });
-
-            imageModal.addEventListener('touchmove', (e) => {
-                if (e.touches.length === 2) {
-                    let distanciaAtual = Math.hypot(
-                        e.touches[0].clientX - e.touches[1].clientX,
-                        e.touches[0].clientY - e.touches[1].clientY
-                    );
-                    let fator = distanciaAtual / distanciaToqueInicial;
-                    escalaZoom = Math.min(Math.max(escalaZoom * fator, 1), 4);
-                    distanciaToqueInicial = distanciaAtual;
-                    imgAmpliada.style.transform = `translate(${posX}px, ${posY}px) scale(${escalaZoom})`;
-                } else if (e.touches.length === 1 && arrastando) {
-                    posX = e.touches[0].clientX - inicioX;
-                    posY = e.touches[0].clientY - inicioY;
-                    imgAmpliada.style.transform = `translate(${posX}px, ${posY}px) scale(${escalaZoom})`;
-                }
-            });
-
-            imageModal.addEventListener('touchend', () => { arrastando = false; });
-        }
-    </script>
-</body>
-</html>
+  </div>
+
+  <!-- Script Unificado com Módulos Firebase -->
+  <script type="module">
+    import { initializeApp } from "https://gstatic.com";
+    import { getFirestore, collection, addDoc, onSnapshot, getDocs, deleteDoc, doc } from "https://gstatic.com";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBPB-_uvxiDJikUfpYI436Esl3Vr50lUEo",
+      authDomain: "://firebaseapp.com",
+      projectId: "axabixo-8270a",
+      storageBucket: "axabixo-8270a.firebasestorage.app",
+      messagingSenderId: "998492020083",
+      appId: "1:998492020083:web:280437cf3b4710d141790"
+    };
+
+    let db = null;
+    let colecaoMarcadores = null;
+    let colecaoPasseios = null; // Nova coleção para os grupos de passeio
+
+    try {
+      const app = initializeApp(firebaseConfig);
+      db = getFirestore(app);
+      colecaoMarcadores = collection(db, "marcadores");
+      colecaoPasseios = collection(db, "passeios");
+    } catch (e) {
+      console.warn("Erro ao iniciar Firebase:", e);
+    }
+
+    // Elementos DOM gerais
+    const status = document.querySelector('.status');
+    const botaoAxaBixo = document.querySelector('.axabixo');
+    const cameraInput = document.querySelector('#cameraInput');
+    const loginModal = document.querySelector('#loginModal');
+    const emailInput = document.querySelector('#emailInput');
+    const senhaInput = document.querySelector('#senhaInput');
+    const btnAcao = document.querySelector('#btnAcao');
+    const btnAlternar = document.querySelector('#btnAlternar');
+    const modalTitulo = document.querySelector('#modalTitulo');
+    const modalSubtitulo = document.querySelector('#modalSubtitulo');
+    
+    // Elementos DOM da nova função de Comunidade
+    const btnAbrirComunidade = document.querySelector('#btnAbrirComunidade');
+    const btnFecharComunidade = document.querySelector('#btnFecharComunidade');
+    const painelComunidade = document.querySelector('#painelComunidade');
+    const btnCriarPasseio = document.querySelector('#btnCriarPasseio');
+    const containerCardsPasseio = document.querySelector('#containerCardsPasseio');
+
+    let latitudeUsuario = null;
+Use o código com cuidado.
+let longitudeUsuario = null;
+let mapa = null;
+let usuarioLogado = localStorage.getItem('axabixo_usuario_logado');
+let modoCadastro = false;
+let marcadoresAtivosNoMapa = {};
+if (usuarioLogado) { loginModal.style.display = 'none'; }
+// Mecanismo de Login/Cadastro LocalStorage igual ao original
+btnAlternar.addEventListener('click', () => {
+modoCadastro = !modoCadastro;
+if (modoCadastro) {
+modalTitulo.textContent = '🐶 AxaBixo - Criar Conta';
+modalSubtitulo.textContent = 'Registre um e-mail válido e crie sua senha.';
+btnAcao.textContent = 'Cadastrar Conta';
+btnAlternar.textContent = 'Já tem uma conta? Faça login';
+} else {
+modalTitulo.textContent = '🐶 AxaBixo - Entrar';
+modalSubtitulo.textContent = 'Insira seus dados para acessar o sistema.';
+btnAcao.textContent = 'Entrar';
+btnAlternar.textContent = 'Não tem uma conta? Crie uma agora';
+}
+});
+function validarEmail(email) { return /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+.[a-zA-Z]{2,}$/.test(email); }
+btnAcao.addEventListener('click', () => {
+const email = emailInput.value.trim().toLowerCase();
+const senha = senhaInput.value.trim();
+if (!validarEmail(email)) { alert('Por favor, digite um e-mail válido.'); return; }
+if (senha.length < 6) { alert('A senha deve ter pelo menos 6 caracteres.'); return; }
+let contas = JSON.parse(localStorage.getItem('axabixo_contas')) || [];
+if (modoCadastro) {
+if (contas.find(c => c.email === email)) { alert('Este e-mail já está cadastrado!'); return; }
+contas.push({ email, senha });
+localStorage.setItem('axabixo_contas', JSON.stringify(contas));
+alert('Conta criada com sucesso! Faça login.');
+modoCadastro = false;
+modalTitulo.textContent = '🐶 AxaBixo - Entrar';
+btnAcao.textContent = 'Entrar';
+} else {
+usuarioLogado = email;
+localStorage.setItem('axabixo_usuario_logado', usuarioLogado);
+loginModal.style.display = 'none';
+location.reload();
+}
+});
+// Controladores de abertura/fechamento do painel lateral de comunidades
+btnAbrirComunidade.addEventListener('click', () => {
+if (!usuarioLogado) { alert('Faça login primeiro para ver a comunidade.'); return; }
+painelComunidade.classList.add('aberto');
+});
+btnFecharComunidade.addEventListener('click', () => {
+painelComunidade.classList.remove('aberto');
+});
+// 1. Inicializar Mapa (Corrigido com OpenStreetMap Gratuito sem chaves do CartoDB)
+function inicializarMapa() {
+mapa = L.map('mapa').setView([-14.2350, -51.9253], 4);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+maxZoom: 19,
+attribution: '© OpenStreetMap contributors'
+}).addTo(mapa);
+carregarESincronizarDados();
+escutarPasseiosComunidade();
+}
+inicializarMapa();
+// 2. Sincronização Híbrida de Marcadores de Animais (Anti-sumiço)
+async function carregarESincronizarDados() {
+const locais = JSON.parse(localStorage.getItem('axabixo_todos_marcadores')) || [];
+locais.forEach(m => desenharMarcadorNoMapa(m.id || m.timestamp, m));
+if (db && colecaoMarcadores) {
+try {
+const snapshotNuvem = await getDocs(colecaoMarcadores);
+snapshotNuvem.forEach(docSnap => {
+desenharMarcadorNoMapa(docSnap.id, docSnap.data());
+});
+} catch (e) { console.warn("Aviso ao carregar nuvem:", e); }
+onSnapshot(colecaoMarcadores, (snapshot) => {
+snapshot.docChanges().forEach((change) => {
+if (change.type === "added") desenharMarcadorNoMapa(change.doc.id, change.doc.data());
+});
+});
+}
+}
+// 3. Desenhar Marcador no Mapa
+function desenharMarcadorNoMapa(id, m) {
+const chaveMapa = id || m.timestamp;
+if (!mapa || marcadoresAtivosNoMapa[chaveMapa]) return;
+const marcador = L.marker([m.lat, m.lng]).addTo(mapa);
+marcadoresAtivosNoMapa[chaveMapa] = marcador;
+marcador.bindPopup(<div style="font-size: 13px; max-width: 220px; text-align: center;"> <strong style="color: #ff5722; font-size: 14px;">🐶 AxaBixo</strong><br><br> <img src="${m.imagemUrl}" style="width: 100%; height: 130px; object-fit: cover; border-radius: 8px;"><br> <div style="text-align: left;"> <b>Descrição:</b> ${m.descricao}<br> <b>📍 Endereço:</b> ${m.endereco}<br> <small style="color: #666;"><b>Data:</b> ${m.data}</small> </div> <br><small style="color: #888; display: block;">Postado por: ${m.criador}</small> </div>);
+}
+// 4. Nova Função: Ouvinte em Tempo Real dos Passeios de Comunidade
+function escutarPasseiosComunidade() {
+if (!db || !colecaoPasseios) return;
+onSnapshot(colecaoPasseios, (snapshot) => {
+containerCardsPasseio.innerHTML = '';
+// Se não houver passeios agendados
+if (snapshot.empty) {
+containerCardsPasseio.innerHTML = 'Nenhum passeio agendado ainda. Seja o primeiro!';
+return;
+}
+snapshot.forEach((docSnap) => {
+const dados = docSnap.data();
+const id = docSnap.id;
+// Formata data padrão para exibição pt-BR
+const dataFormatada = dados.dataPasseio.split('-').reverse().join('/');
+const card = document.createElement('div');
+card.className = 'card-passeio';
+let botaoDeletar = '';
+if (usuarioLogado === dados.criador) {
+botaoDeletar = <button class="btn-deletar-passeio" data-id="${id}">Excluir Encontro</button>;
+}
+card.innerHTML = <h5>🐕 ${dados.nomeGrupo}</h5> <p><strong>📍 Encontro:</strong> ${dados.pontoEncontro}</p> <p style="margin-bottom:6px;">${dados.descricao}</p> <div class="info-tempo"> <span>📅 ${dataFormatada}</span> <span>⏰ ${dados.horaPasseio}</span> </div> <small style="font-size:11px; color:#aaa; display:block; margin-top:5px;">Por: ${dados.criador}</small> ${botaoDeletar};
+containerCardsPasseio.appendChild(card);
+});
+// Evento de exclusão de passeios criados pelo usuário logado
+document.querySelectorAll('.btn-deletar-passeio').forEach(btn => {
+btn.addEventListener('click', async (e) => {
+const idPasseio = e.target.getAttribute('data-id');
+if (confirm("Deseja cancelar o agendamento desse passeio?")) {
+try {
+await deleteDoc(doc(db, "passeios", idPasseio));
+alert("Passeio removido!");
+} catch (err) { console.error("Erro ao deletar passeio:", err); }
+}
+});
+});
+});
+}
+// 5. Nova Função: Agendamento de Novo Passeio na Comunidade
+btnCriarPasseio.addEventListener('click', async () => {
+const nomeGrupo = document.querySelector('#nomeGrupoInput').value.trim();
+const pontoEncontro = document.querySelector('#pontoEncontroInput').value.trim();
+const dataPasseio = document.querySelector('#dataPasseioInput').value;
+const horaPasseio = document.querySelector('#horaPasseioInput').value;
+const descricao = document.querySelector('#descPasseioInput').value.trim() || "Passeio coletivo aberto para socialização.";
+if (!nomeGrupo || !pontoEncontro || !dataPasseio || !horaPasseio) {
+alert("Preencha todos os campos obrigatórios para marcar o passeio!");
+return;
+}
+const novoPasseio = {
+nomeGrupo,
+pontoEncontro,
+dataPasseio,
+horaPasseio,
+descricao,
+criador: usuarioLogado,
+timestamp: Date.now()
+};
+try {
+status.textContent = 'Agendando passeio...';
+await addDoc(colecaoPasseios, novoPasseio);
+status.textContent = 'Passeio marcado!';
+// Limpar os campos do formulário
+document.querySelector('#nomeGrupoInput').value = '';
+document.querySelector('#pontoEncontroInput').value = '';
+document.querySelector('#dataPasseioInput').value = '';
+document.querySelector('#horaPasseioInput').value = '';
+document.querySelector('#descPasseioInput').value = '';
+setTimeout(() => { status.textContent = ''; }, 3000);
+} catch (err) {
+console.error("Erro ao salvar passeio na nuvem:", err);
+alert("Não foi possível salvar o passeio. Verifique a conexão.");
+status.textContent = '';
+}
+});
+// 6. Geolocalização Tradicional do App
+const acharLocalizacao = () => {
+status.textContent = 'Buscando sua localização...';
+const success = (position) => {
+latitudeUsuario = position.coords.latitude;
+longitudeUsuario = position.coords.longitude;
+status.textContent = 'Sua localização foi encontrada!';
+if (mapa) {
+mapa.setView([latitudeUsuario, longitudeUsuario], 16);
+L.circle([latitudeUsuario, longitudeUsuario], {
+color: '#2196F3', fillColor: '#2196F3', fillOpacity: 0.3, radius: 30
+}).addTo(mapa);
+}
+setTimeout(() => { status.textContent = ''; }, 4000);
+};
+const error = () => {
+status.textContent = 'Não foi possível pegar sua localização. Ative o GPS!';
+setTimeout(() => { status.textContent = ''; }, 5000);
+};
+if (navigator.geolocation) {
+navigator.geolocation.getCurrentPosition(success, error, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+}
+};
+acharLocalizacao();
+// 7. Reversão de Endereço Nominatim
+async function buscarEndereco(lat, lng) {
+try {
+status.textContent = 'Buscando endereço...';
+const url = https://openstreetmap.org{lat}&lon=${lng};
+const resposta = await fetch(url);
+const dados = await resposta.json();
+status.textContent = '';
+if (dados && dados.address) {
+const rua = dados.address.road || dados.address.pedestrian || 'Rua não identificada';
+const bairro = dados.address.suburb || dados.address.neighbourhood || 'Bairro não identificado';
+const cidade = dados.address.city || dados.address.town || 'Cidade não identificada';
+return ${rua}, ${bairro} - ${cidade};
+}
+return 'Endereço aproximado não localizado';
+} catch { status.textContent = ''; return 'Erro ao carregar endereço'; }
+}
+// 8. Clique no botão Principal AxaBixo
+botaoAxaBixo.addEventListener('click', () => {
+if (!usuarioLogado) { alert('Você precisa fazer login com sua conta primeiro.'); loginModal.style.display = 'flex'; return; }
+if (latitudeUsuario === null || longitudeUsuario === null) { alert('Aguarde o carregamento da sua localização.'); acharLocalizacao(); return; }
+cameraInput.click();
+});
+// 9. Compressão Forte Base64 de Imagem Original do App
+function comprimirImagem(file, callback) {
+const reader = new FileReader();
+reader.onload = function(e) {
+const img = new Image();
+img.onload = function() {
+const canvas = document.createElement('canvas');
+const ctx = canvas.getContext('2d');
+const MAX_WIDTH = 300; const MAX_HEIGHT = 300;
+let width = img.width; let height = img.height;
+if (width > height) { if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } }
+else { if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } }
+canvas.width = width; canvas.height = height;
+ctx.drawImage(img, 0, 0, width, height);
+const dataUrl = canvas.toDataURL('image/jpeg', 0.3);
+callback(dataUrl);
+};
+img.src = e.target.result;
+};
+reader.readAsDataURL(file);
+}
+// 10. Processamento e Envio de Foto de Animais
+cameraInput.addEventListener('change', (event) => {
+const arquivo = event.target.files[0];
+if (!arquivo) return;
+let descricao = prompt("Descreva o animal de rua que você viu:");
+if (!descricao) descricao = "Animal de rua visto recentemente.";
+status.textContent = 'Processando foto...';
+comprimirImagem(arquivo, async function(imagemComprimidaUrl) {
+const endereco = await buscarEndereco(latitudeUsuario, longitudeUsuario);
+const timestampUnico = Date.now();
+const novoMarcadorObj = {
+id: 'local_' + timestampUnico,
+lat: latitudeUsuario,
+lng: longitudeUsuario,
+descricao: descricao,
+endereco: endereco,
+imagemUrl: imagemComprimidaUrl,
+criador: usuarioLogado,
+data: new Date().toLocaleDateString(),
+timestamp: timestampUnico
+};
+try {
+let salvos = JSON.parse(localStorage.getItem('axabixo_todos_marcadores')) || [];
+salvos.push(novoMarcadorObj);
+localStorage.setItem('axabixo_todos_marcadores', JSON.stringify(salvos));
+desenharMarcadorNoMapa(timestampUnico, novoMarcadorObj);
+} catch (err) { console.warn("Erro ao salvar localmente:", err); }
+if (db && colecaoMarcadores) {
+try {
+await addDoc(colecaoMarcadores, novoMarcadorObj);
+status.textContent = 'Publicado com sucesso!';
+setTimeout(() => { status.textContent = ''; }, 3000);
+} catch (erroNuvem) {
+console.error("Erro na nuvem:", erroNuvem);
+status.textContent = 'Salvo no aparelho.';
+setTimeout(() => { status.textContent = ''; }, 3000);
+}
+}
+cameraInput.value = '';
+});
+});
