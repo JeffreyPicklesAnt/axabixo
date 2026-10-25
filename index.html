@@ -618,4 +618,231 @@
 
         acharLocalizacao();
 
-        async function buscar
+        async function buscarEndereco(lat, lng) {
+            try {
+                status.textContent = 'Buscando endereço...';
+                const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`;
+                const resposta = await fetch(url);
+                const dados = await resposta.json();
+                status.textContent = '';
+
+                if (dados && dados.address) {
+                    const rua = dados.address.road || dados.address.pedestrian || 'Rua não identificada';
+                    const bairro = dados.address.suburb || dados.address.neighbourhood || 'Bairro não identificado';
+                    const cidade = dados.address.city || dados.address.town || 'Cidade não identificada';
+                    return `${rua}, ${bairro} - ${cidade}`;
+                }
+                return 'Endereço aproximado não localizado';
+            } catch {
+                status.textContent = '';
+                return 'Endereço aproximado';
+            }
+        }
+
+        if (botaoAxaBixo) {
+            botaoAxaBixo.addEventListener('click', () => {
+                if (!usuarioLogadoEmail) {
+                    alert('Você precisa fazer login com sua conta primeiro.');
+                    loginModal.style.display = 'flex';
+                    return;
+                }
+
+                if (latitudeUsuario === null || longitudeUsuario === null) {
+                    alert('Aguarde o carregamento da sua localização.');
+                    acharLocalizacao();
+                    return;
+                }
+                cameraInput.click();
+            });
+        }
+
+        function comprimirImagem(file, callback) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    const MAX_WIDTH = 300;
+                    const MAX_HEIGHT = 300;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > MAX_WIDTH) {
+                            height *= MAX_WIDTH / width;
+                            width = MAX_WIDTH;
+                        }
+                    } else {
+                        if (height > MAX_HEIGHT) {
+                            width *= MAX_HEIGHT / height;
+                            height = MAX_HEIGHT;
+                        }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.3);
+                    callback(dataUrl);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        if (cameraInput) {
+            cameraInput.addEventListener('change', (event) => {
+                const arquivo = event.target.files[0];
+                if (!arquivo) return;
+
+                let descricao = prompt("Descreva o animal de rua que você viu:");
+                if (!descricao) descricao = "Animal de rua visto recentemente.";
+
+                status.textContent = 'Processando foto...';
+
+                comprimirImagem(arquivo, async function(imagemComprimidaUrl) {
+                    const endereco = await buscarEndereco(latitudeUsuario, longitudeUsuario);
+                    const timestampUnico = Date.now();
+
+                    const novoMarcadorObj = {
+                        id: 'local_' + timestampUnico,
+                        lat: latitudeUsuario,
+                        lng: longitudeUsuario,
+                        descricao: descricao,
+                        endereco: endereco,
+                        imagemUrl: imagemComprimidaUrl,
+                        criador: usuarioLogadoEmail,
+                        data: new Date().toLocaleDateString(),
+                        timestamp: timestampUnico
+                    };
+
+                    try {
+                        let salvos = obterMarcadoresLocais();
+                        salvos.push(novoMarcadorObj);
+                        localStorage.setItem('axabixo_todos_marcadores', JSON.stringify(salvos));
+                        desenharMarcadorNoMapa(timestampUnico, novoMarcadorObj);
+                    } catch (err) {
+                        console.warn("Erro ao salvar localmente:", err);
+                    }
+
+                    if (db && colecaoMarcadores) {
+                        try {
+                            const { addDoc } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
+                            await addDoc(colecaoMarcadores, novoMarcadorObj);
+                            status.textContent = 'Publicado com sucesso!';
+                            setTimeout(() => { status.textContent = ''; }, 3000);
+                        } catch (erroNuvem) {
+                            console.error("Erro na nuvem:", erroNuvem);
+                            status.textContent = 'Salvo no aparelho.';
+                            setTimeout(() => { status.textContent = ''; }, 4000);
+                        }
+                    }
+
+                    cameraInput.value = '';
+                });
+            });
+        }
+
+        // Lógica de Zoom e Arraste para a Imagem Ampliada (Pop-up)
+        let escalaZoom = 1;
+        let arrastando = false;
+        let posX = 0, posY = 0;
+        let inicioX = 0, inicioY = 0;
+
+        if (imageModal) {
+            imageModal.addEventListener('click', (e) => {
+                if (e.target === imageModal) {
+                    fecharZoom();
+                }
+            });
+        }
+
+        function fecharZoom() {
+            imageModal.style.display = 'none';
+            escalaZoom = 1;
+            posX = 0;
+            posY = 0;
+            imgAmpliada.style.transform = `translate(0px, 0px) scale(1)`;
+        }
+
+        window.abrirFotoAmpliada = function(url) {
+            imgAmpliada.src = url;
+            escalaZoom = 1;
+            posX = 0;
+            posY = 0;
+            imgAmpliada.style.transform = `translate(0px, 0px) scale(1)`;
+            imageModal.style.display = 'flex';
+        };
+
+        if (imageModal) {
+            imageModal.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                if (e.deltaY < 0) {
+                    escalaZoom = Math.min(escalaZoom + 0.2, 4);
+                } else {
+                    escalaZoom = Math.max(escalaZoom - 0.2, 1);
+                }
+                if (escalaZoom === 1) { posX = 0; posY = 0; }
+                imgAmpliada.style.transform = `translate(${posX}px, ${posY}px) scale(${escalaZoom})`;
+            }, { passive: false });
+        }
+
+        if (imgAmpliada) {
+            imgAmpliada.addEventListener('mousedown', (e) => {
+                if (escalaZoom > 1) {
+                    arrastando = true;
+                    inicioX = e.clientX - posX;
+                    inicioY = e.clientY - posY;
+                }
+            });
+        }
+
+        window.addEventListener('mousemove', (e) => {
+            if (!arrastando) return;
+            posX = e.clientX - inicioX;
+            posY = e.clientY - inicioY;
+            imgAmpliada.style.transform = `translate(${posX}px, ${posY}px) scale(${escalaZoom})`;
+        });
+
+        window.addEventListener('mouseup', () => { arrastando = false; });
+
+        let distanciaToqueInicial = 0;
+        if (imageModal) {
+            imageModal.addEventListener('touchstart', (e) => {
+                if (e.touches.length === 2) {
+                    distanciaToqueInicial = Math.hypot(
+                        e.touches[0].clientX - e.touches[1].clientX,
+                        e.touches[0].clientY - e.touches[1].clientY
+                    );
+                } else if (e.touches.length === 1 && escalaZoom > 1) {
+                    arrastando = true;
+                    inicioX = e.touches[0].clientX - posX;
+                    inicioY = e.touches[0].clientY - posY;
+                }
+            });
+
+            imageModal.addEventListener('touchmove', (e) => {
+                if (e.touches.length === 2) {
+                    let distanciaAtual = Math.hypot(
+                        e.touches[0].clientX - e.touches[1].clientX,
+                        e.touches[0].clientY - e.touches[1].clientY
+                    );
+                    let fator = distanciaAtual / distanciaToqueInicial;
+                    escalaZoom = Math.min(Math.max(escalaZoom * fator, 1), 4);
+                    distanciaToqueInicial = distanciaAtual;
+                    imgAmpliada.style.transform = `translate(${posX}px, ${posY}px) scale(${escalaZoom})`;
+                } else if (e.touches.length === 1 && arrastando) {
+                    posX = e.touches[0].clientX - inicioX;
+                    posY = e.touches[0].clientY - inicioY;
+                    imgAmpliada.style.transform = `translate(${posX}px, ${posY}px) scale(${escalaZoom})`;
+                }
+            });
+
+            imageModal.addEventListener('touchend', () => { arrastando = false; });
+        }
+    </script>
+</body>
+</html>
