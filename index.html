@@ -175,7 +175,7 @@
             <input type="password" id="senhaInput" placeholder="Sua senha (mínimo 6 caracteres)" required>
             
             <button id="btnAcao">Entrar</button>
-            <button class="toggle-btn" id="btnAlternar">Não tem uma conta? Crie uma agora</button>
+            <button class="toggle-btn" id="btnAlternar" type="button">Não tem uma conta? Crie uma agora</button>
         </div>
     </div>
 
@@ -192,7 +192,7 @@
 
     <input type="file" id="cameraInput" accept="image/*" capture="environment">
 
-    <!-- Script Completo com Ampliação de Imagem -->
+    <!-- Script Completo Corrigido -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getFirestore, collection, addDoc, onSnapshot, getDocs, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
@@ -253,7 +253,9 @@
             imageModal.style.display = 'flex';
         };
 
-        btnAlternar.addEventListener('click', () => {
+        // Alternar entre Entrar e Cadastrar Conta
+        btnAlternar.addEventListener('click', (e) => {
+            e.preventDefault();
             modoCadastro = !modoCadastro;
             if (modoCadastro) {
                 modalTitulo.textContent = '🐶 AxaBixo - Criar Conta';
@@ -272,9 +274,16 @@
             return /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email);
         }
 
-        btnAcao.addEventListener('click', () => {
+        // Ação de Entrar ou Cadastrar
+        btnAcao.addEventListener('click', (e) => {
+            e.preventDefault();
             const email = emailInput.value.trim().toLowerCase();
             const senha = senhaInput.value.trim();
+
+            if (!email || !senha) {
+                alert('Por favor, preencha o e-mail e a senha.');
+                return;
+            }
 
             if (!validarEmail(email)) {
                 alert('Por favor, digite um e-mail válido (ex: usuario@gmail.com).');
@@ -290,16 +299,40 @@
 
             if (modoCadastro) {
                 if (contas.find(c => c.email === email)) {
-                    alert('Este e-mail já está cadastrado!');
+                    alert('Este e-mail já está cadastrado! Faça login.');
                     return;
                 }
                 contas.push({ email, senha });
                 localStorage.setItem('axabixo_contas', JSON.stringify(contas));
                 alert('Conta criada com sucesso! Faça login para continuar.');
+                
+                // Volta para a tela de login
                 modoCadastro = false;
                 modalTitulo.textContent = '🐶 AxaBixo - Entrar';
+                modalSubtitulo.textContent = 'Insira seus dados para acessar o sistema.';
                 btnAcao.textContent = 'Entrar';
+                btnAlternar.textContent = 'Não tem uma conta? Crie uma agora';
+                senhaInput.value = '';
             } else {
+                let contaEncontrada = contas.find(c => c.email === email);
+
+                // Caso especial se a conta não estiver no array mas for o primeiro uso local
+                if (!contaEncontrada && contas.length === 0) {
+                    contas.push({ email, senha });
+                    localStorage.setItem('axabixo_contas', JSON.stringify(contas));
+                    contaEncontrada = { email, senha };
+                }
+
+                if (!contaEncontrada) {
+                    alert('Conta não encontrada! Clique em "Crie uma agora" abaixo.');
+                    return;
+                }
+
+                if (contaEncontrada.senha !== senha) {
+                    alert('Senha incorreta!');
+                    return;
+                }
+
                 usuarioLogado = email;
                 localStorage.setItem('axabixo_usuario_logado', usuarioLogado);
                 loginModal.style.display = 'none';
@@ -356,7 +389,7 @@
             }
         }
 
-        // 3. Desenhar Marcador com Imagem Clicável
+        // 3. Desenhar Marcador
         function desenharMarcadorNoMapa(id, m) {
             const chaveMapa = id || m.timestamp;
             if (!mapa || marcadoresAtivosNoMapa[chaveMapa]) return;
@@ -464,4 +497,122 @@
                 if (dados && dados.address) {
                     const rua = dados.address.road || dados.address.pedestrian || 'Rua não identificada';
                     const bairro = dados.address.suburb || dados.address.neighbourhood || 'Bairro não identificado';
-                    const cidade = dados.address.city || dados.address.town ||
+                    const cidade = dados.address.city || dados.address.town || 'Cidade não identificada';
+                    return `${rua}, ${bairro} - ${cidade}`;
+                }
+                return 'Endereço aproximado não localizado';
+            } catch {
+                status.textContent = '';
+                return 'Erro ao carregar endereço';
+            }
+        }
+
+        // 7. Botão AxaBixo
+        botaoAxaBixo.addEventListener('click', () => {
+            if (!usuarioLogado) {
+                alert('Você precisa fazer login com sua conta primeiro.');
+                loginModal.style.display = 'flex';
+                return;
+            }
+
+            if (latitudeUsuario === null || longitudeUsuario === null) {
+                alert('Aguarde o carregamento da sua localização.');
+                acharLocalizacao();
+                return;
+            }
+            cameraInput.click();
+        });
+
+        // 8. Compressão de Imagem Otimizada
+        function comprimirImagem(file, callback) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    const MAX_WIDTH = 300;
+                    const MAX_HEIGHT = 300;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > MAX_WIDTH) {
+                            height *= MAX_WIDTH / width;
+                            width = MAX_WIDTH;
+                        }
+                    } else {
+                        if (height > MAX_HEIGHT) {
+                            width *= MAX_HEIGHT / height;
+                            height = MAX_HEIGHT;
+                        }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.3);
+                    callback(dataUrl);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // 9. Salvamento Definitivo
+        cameraInput.addEventListener('change', (event) => {
+            const arquivo = event.target.files[0];
+            if (!arquivo) return;
+
+            let descricao = prompt("Descreva o animal de rua que você viu:");
+            if (!descricao) descricao = "Animal de rua visto recentemente.";
+
+            status.textContent = 'Processando foto...';
+
+            comprimirImagem(arquivo, async function(imagemComprimidaUrl) {
+                const endereco = await buscarEndereco(latitudeUsuario, longitudeUsuario);
+                const timestampUnico = Date.now();
+
+                const novoMarcadorObj = {
+                    id: 'local_' + timestampUnico,
+                    lat: latitudeUsuario,
+                    lng: longitudeUsuario,
+                    descricao: descricao,
+                    endereco: endereco,
+                    imagemUrl: imagemComprimidaUrl,
+                    criador: usuarioLogado,
+                    data: new Date().toLocaleDateString(),
+                    timestamp: timestampUnico
+                };
+
+                // 1. Salva localmente
+                try {
+                    let salvos = JSON.parse(localStorage.getItem('axabixo_todos_marcadores')) || [];
+                    salvos.push(novoMarcadorObj);
+                    localStorage.setItem('axabixo_todos_marcadores', JSON.stringify(salvos));
+                    desenharMarcadorNoMapa(timestampUnico, novoMarcadorObj);
+                } catch (err) {
+                    console.warn("Erro ao salvar localmente:", err);
+                }
+
+                // 2. Envia para o Firebase
+                if (db && colecaoMarcadores) {
+                    try {
+                        await addDoc(colecaoMarcadores, novoMarcadorObj);
+                        status.textContent = 'Publicado com sucesso!';
+                        setTimeout(() => { status.textContent = ''; }, 3000);
+                    } catch (erroNuvem) {
+                        console.error("Erro na nuvem:", erroNuvem);
+                        status.textContent = 'Salvo no aparelho.';
+                        setTimeout(() => { status.textContent = ''; }, 3000);
+                    }
+                }
+
+                cameraInput.value = '';
+            });
+        });
+    </script>
+</body>
+</html>
