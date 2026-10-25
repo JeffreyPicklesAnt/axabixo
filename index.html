@@ -231,7 +231,7 @@
                 <input type="file" id="fotoPerfilInput" accept="image/*" style="display: none;">
             </div>
 
-            <button id="btnAcao">Entrar</button>
+            <button id="btnAcao" type="button">Entrar</button>
             <button class="toggle-btn" id="btnAlternar" type="button">Não tem uma conta? Crie uma agora</button>
         </div>
     </div>
@@ -308,6 +308,23 @@
             loginModal.style.display = 'none';
         }
 
+        // Funções seguras de leitura do LocalStorage
+        function obterContas() {
+            try {
+                return JSON.parse(localStorage.getItem('axabixo_contas')) || [];
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function obterMarcadoresLocais() {
+            try {
+                return JSON.parse(localStorage.getItem('axabixo_todos_marcadores')) || [];
+            } catch (e) {
+                return [];
+            }
+        }
+
         if (fotoPerfilInput) {
             fotoPerfilInput.addEventListener('change', (e) => {
                 const arquivo = e.target.files[0];
@@ -344,7 +361,7 @@
 
         function renderizarPerfilHtml(email) {
             if (!email) email = "desconhecido@axabixo.com";
-            let contas = JSON.parse(localStorage.getItem('axabixo_contas')) || [];
+            let contas = obterContas();
             let conta = contas.find(c => c.email === email);
             let nomeExibicao = conta && conta.nome ? conta.nome : email.split('@')[0];
             let descExibicao = conta && conta.descricao ? conta.descricao : 'Resgatador(a) de animais';
@@ -452,278 +469,4 @@
                 btnAlternar.textContent = 'Já tem uma conta? Faça login';
                 camposCadastro.style.display = 'block';
             } else {
-                modalTitulo.textContent = '🐶 AxaBixo - Entrar';
-                modalSubtitulo.textContent = 'Insira seus dados para acessar o sistema.';
-                btnAcao.textContent = 'Entrar';
-                btnAlternar.textContent = 'Não tem uma conta? Crie uma agora';
-                camposCadastro.style.display = 'none';
-            }
-        });
-
-        function validarEmail(email) {
-            return /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email);
-        }
-
-        btnAcao.addEventListener('click', (e) => {
-            e.preventDefault();
-            const email = emailInput.value.trim().toLowerCase();
-            const senha = senhaInput.value.trim();
-
-            if (!email || !senha) {
-                alert('Por favor, preencha o e-mail e a senha.');
-                return;
-            }
-
-            if (!validarEmail(email)) {
-                alert('Por favor, digite um e-mail válido (ex: usuario@gmail.com).');
-                return;
-            }
-
-            if (senha.length < 6) {
-                alert('A senha deve ter pelo menos 6 caracteres.');
-                return;
-            }
-
-            let contas = JSON.parse(localStorage.getItem('axabixo_contas')) || [];
-
-            if (modoCadastro) {
-                const emailExistente = contas.find(c => c.email === email);
-                if (emailExistente) {
-                    alert('Este e-mail já está cadastrado! Faça login com sua senha.');
-                    return;
-                }
-
-                const nomeUsuario = nomeUsuarioInput.value.trim() || email.split('@')[0];
-                const descricaoPerfil = descricaoPerfilInput.value.trim() || 'Amante dos animais de rua';
-
-                contas.push({
-                    email: email,
-                    senha: senha,
-                    nome: nomeUsuario,
-                    descricao: descricaoPerfil,
-                    fotoPerfil: fotoPerfilBase64Temp || null
-                });
-
-                localStorage.setItem('axabixo_contas', JSON.stringify(contas));
-                alert('Conta criada com sucesso! Faça login para continuar.');
-                
-                modoCadastro = false;
-                modalTitulo.textContent = '🐶 AxaBixo - Entrar';
-                modalSubtitulo.textContent = 'Insira seus dados para acessar o sistema.';
-                btnAcao.textContent = 'Entrar';
-                btnAlternar.textContent = 'Não tem uma conta? Crie uma agora';
-                camposCadastro.style.display = 'none';
-                senhaInput.value = '';
-                fotoPerfilBase64Temp = null;
-            } else {
-                let contaEncontrada = contas.find(c => c.email === email);
-
-                if (!contaEncontrada && contas.length === 0) {
-                    contaEncontrada = { email: email, senha: senha, nome: email.split('@')[0], descricao: 'Resgatador' };
-                    contas.push(contaEncontrada);
-                    localStorage.setItem('axabixo_contas', JSON.stringify(contas));
-                }
-
-                if (!contaEncontrada) {
-                    alert('Conta não encontrada! Clique em "Crie uma agora" abaixo.');
-                    return;
-                }
-
-                if (contaEncontrada.senha !== senha) {
-                    alert('Senha incorreta!');
-                    return;
-                }
-
-                usuarioLogadoEmail = email;
-                localStorage.setItem('axabixo_usuario_logado', usuarioLogadoEmail);
-                loginModal.style.display = 'none';
-                alert(`Bem-vindo ao AxaBixo, ${contaEncontrada.nome}!`);
-                location.reload();
-            }
-        });
-
-        function inicializarMapa() {
-            mapa = L.map('mapa').setView([-14.2350, -51.9253], 4);
-
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 19,
-                attribution: '&copy; OpenStreetMap contributors'
-            }).addTo(mapa);
-
-            carregarESincronizarDados();
-        }
-
-        inicializarMapa();
-
-        async function carregarESincronizarDados() {
-            const locais = JSON.parse(localStorage.getItem('axabixo_todos_marcadores')) || [];
-            locais.forEach(m => desenharMarcadorNoMapa(m.id || m.timestamp, m));
-
-            if (db && colecaoMarcadores) {
-                try {
-                    const snapshotNuvem = await getDocs(colecaoMarcadores);
-                    snapshotNuvem.forEach(docSnap => {
-                        desenharMarcadorNoMapa(docSnap.id, docSnap.data());
-                    });
-                } catch (e) {
-                    console.warn("Aviso ao carregar nuvem:", e);
-                }
-
-                onSnapshot(colecaoMarcadores, (snapshot) => {
-                    snapshot.docChanges().forEach((change) => {
-                        const data = change.doc.data();
-                        const id = change.doc.id;
-
-                        if (change.type === "added") {
-                            desenharMarcadorNoMapa(id, data);
-                        }
-                        if (change.type === "removed") {
-                            if (marcadoresAtivosNoMapa[id]) {
-                                mapa.removeLayer(marcadoresAtivosNoMapa[id]);
-                                delete marcadoresAtivosNoMapa[id];
-                            }
-                        }
-                    });
-                });
-            }
-        }
-
-        function desenharMarcadorNoMapa(id, m) {
-            const chaveMapa = id || m.timestamp;
-            if (!mapa || marcadoresAtivosNoMapa[chaveMapa]) return;
-
-            const marcador = L.marker([m.lat, m.lng]).addTo(mapa);
-            marcadoresAtivosNoMapa[chaveMapa] = marcador;
-
-            let criadorEmail = m.criador || 'desconhecido@axabixo.com';
-            let botaoDeletarHTML = '';
-            
-            if (usuarioLogadoEmail === criadorEmail) {
-                botaoDeletarHTML = `<br><button onclick="window.deletarMarcador('${id}', '${criadorEmail}', ${m.timestamp || 0})" style="background-color: #d9534f; color: white; border: none; padding: 6px 12px; border-radius: 5px; cursor: pointer; margin-top: 8px; width: 100%;">🗑️ Remover meu marcador</button>`;
-            }
-
-            let perfilCriadorHtml = `<div style="margin-bottom: 6px; border-bottom: 1px solid #eee; padding-bottom: 5px;">Postado por: ${renderizarPerfilHtml(criadorEmail)}</div>`;
-
-            marcador.bindPopup(`
-                <div style="font-size: 13px; max-width: 220px; text-align: center;">
-                    <strong style="color: #ff5722; font-size: 14px;">🐶 AxaBixo</strong><br><br>
-                    ${perfilCriadorHtml}
-                    <img src="${m.imagemUrl}" onclick="window.abrirFotoAmpliada('${m.imagemUrl}')" style="width: 100%; height: 130px; object-fit: cover; border-radius: 8px; margin-bottom: 6px; cursor: pointer;" title="Clique para ampliar a foto"><br>
-                    <div style="text-align: left;">
-                        <b>Descrição:</b> ${m.descricao}<br>
-                        <b>📍 Endereço:</b> ${m.endereco}<br>
-                        <small style="color: #666;"><b>Data:</b> ${m.data}</small>
-                    </div>
-                    ${botaoDeletarHTML}
-                </div>
-            `);
-        }
-
-        window.deletarMarcador = async function(id, criador, timestamp) {
-            if (usuarioLogadoEmail !== criador) {
-                alert("Apenas o criador deste marcador pode removê-lo!");
-                return;
-            }
-
-            if (!confirm("Tem certeza que deseja remover este marcador?")) return;
-
-            if (db && id && !id.toString().startsWith('local_')) {
-                try {
-                    await deleteDoc(doc(db, "marcadores", id));
-                } catch (e) {
-                    console.error("Erro ao deletar do Firebase", e);
-                }
-            }
-
-            let salvos = JSON.parse(localStorage.getItem('axabixo_todos_marcadores')) || [];
-            if (timestamp) {
-                salvos = salvos.filter(m => m.timestamp !== timestamp);
-            } else {
-                salvos = salvos.filter(m => m.id !== id);
-            }
-            localStorage.setItem('axabixo_todos_marcadores', JSON.stringify(salvos));
-            alert("Marcador removido com sucesso!");
-            location.reload();
-        };
-
-        const acharLocalizacao = () => {
-            status.textContent = 'Buscando sua localização...';
-
-            const success = (position) => {
-                latitudeUsuario = position.coords.latitude;
-                longitudeUsuario = position.coords.longitude;
-
-                status.textContent = 'Sua localização foi encontrada!';
-                if (mapa) {
-                    mapa.setView([latitudeUsuario, longitudeUsuario], 16);
-
-                    L.circle([latitudeUsuario, longitudeUsuario], {
-                        color: '#2196F3',
-                        fillColor: '#2196F3',
-                        fillOpacity: 0.3,
-                        radius: 30
-                    }).addTo(mapa);
-                }
-
-                setTimeout(() => { status.textContent = ''; }, 4000);
-            };
-
-            const error = () => {
-                status.textContent = 'Não foi possível pegar sua localização. Ative o GPS!';
-                setTimeout(() => { status.textContent = ''; }, 5000);
-            };
-
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(success, error, {
-                    enableHighAccuracy: true,
-                    timeout: 10000,
-                    maximumAge: 0
-                });
-            }
-        };
-
-        acharLocalizacao();
-
-        async function buscarEndereco(lat, lng) {
-            try {
-                status.textContent = 'Buscando endereço...';
-                const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`;
-                const resposta = await fetch(url);
-                const dados = await resposta.json();
-                status.textContent = '';
-
-                if (dados && dados.address) {
-                    const rua = dados.address.road || dados.address.pedestrian || 'Rua não identificada';
-                    const bairro = dados.address.suburb || dados.address.neighbourhood || 'Bairro não identificado';
-                    const cidade = dados.address.city || dados.address.town || 'Cidade não identificada';
-                    return `${rua}, ${bairro} - ${cidade}`;
-                }
-                return 'Endereço aproximado não localizado';
-            } catch {
-                status.textContent = '';
-                return 'Erro ao carregar endereço';
-            }
-        }
-
-        botaoAxaBixo.addEventListener('click', () => {
-            if (!usuarioLogadoEmail) {
-                alert('Você precisa fazer login com sua conta primeiro.');
-                loginModal.style.display = 'flex';
-                return;
-            }
-
-            if (latitudeUsuario === null || longitudeUsuario === null) {
-                alert('Aguarde o carregamento da sua localização.');
-                acharLocalizacao();
-                return;
-            }
-            cameraInput.click();
-        });
-
-        function comprimirImagem(file, callback) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const img = new Image();
-                img.onload = function() {
-                    const canvas = document.createElement('canvas');
-                    const ctx =
+                modalTitulo.textContent = '🐶 AxaBixo - Entrar
