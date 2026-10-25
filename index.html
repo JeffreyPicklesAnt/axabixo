@@ -19,6 +19,7 @@
             height: 100%;
             font-family: Arial, sans-serif;
             overflow: hidden;
+            background-color: #f5f5f5;
         }
 
         #mapa {
@@ -209,7 +210,7 @@
         }
     </style>
 
-    <!-- JS do Leaflet -->
+    <!-- JS do Leaflet com carregamento assíncrono seguro -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body>
@@ -248,7 +249,7 @@
 
     <input type="file" id="cameraInput" accept="image/*" capture="environment">
 
-    <!-- Script Unificado Unindo Login, Perfis, Mapa e Zoom de Imagem -->
+    <!-- Script Robusto e Blindado contra falhas de rede -->
     <script type="module">
         const status = document.querySelector('.status');
         const botaoAxaBixo = document.querySelector('.axabixo');
@@ -443,4 +444,178 @@
                     }
 
                     usuarioLogadoEmail = email;
-                    localStorage.setItem('axabixo_usuario_logado
+                    localStorage.setItem('axabixo_usuario_logado', usuarioLogadoEmail);
+                    loginModal.style.display = 'none';
+                    alert(`Bem-vindo ao AxaBixo, ${contaEncontrada.nome}!`);
+                    location.reload();
+                }
+            });
+        }
+
+        // Inicialização do Mapa e Firebase em segundo plano (não bloqueia a UI)
+        async function conectarFirebase() {
+            try {
+                const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js");
+                const { getFirestore, collection, onSnapshot, getDocs } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
+                
+                const firebaseConfig = {
+                    apiKey: "AIzaSyBPB-_uvxiDJikUfpYI436Esl3Vr50lUEo",
+                    authDomain: "axabixo-8270a.firebaseapp.com",
+                    projectId: "axabixo-8270a",
+                    storageBucket: "axabixo-8270a.firebasestorage.app",
+                    messagingSenderId: "998492020083",
+                    appId: "1:998492020083:web:280437cf3b4710d141790"
+                };
+
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                colecaoMarcadores = collection(db, "marcadores");
+
+                const snapshotNuvem = await getDocs(colecaoMarcadores);
+                snapshotNuvem.forEach(docSnap => {
+                    desenharMarcadorNoMapa(docSnap.id, docSnap.data());
+                });
+
+                onSnapshot(colecaoMarcadores, (snapshot) => {
+                    snapshot.docChanges().forEach((change) => {
+                        const data = change.doc.data();
+                        const id = change.doc.id;
+                        if (change.type === "added") {
+                            desenharMarcadorNoMapa(id, data);
+                        }
+                        if (change.type === "removed") {
+                            if (marcadoresAtivosNoMapa[id]) {
+                                mapa.removeLayer(marcadoresAtivosNoMapa[id]);
+                                delete marcadoresAtivosNoMapa[id];
+                            }
+                        }
+                    });
+                });
+            } catch (e) {
+                console.warn("Modo Offline / Sem Firebase:", e);
+            }
+        }
+
+        function inicializarMapa() {
+            try {
+                if (typeof L === 'undefined') {
+                    setTimeout(inicializarMapa, 500); // Aguarda o Leaflet carregar caso esteja lento após limpar cache
+                    return;
+                }
+                mapa = L.map('mapa').setView([-14.2350, -51.9253], 4);
+
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '&copy; OpenStreetMap contributors'
+                }).addTo(mapa);
+
+                const locais = obterMarcadoresLocais();
+                locais.forEach(m => desenharMarcadorNoMapa(m.id || m.timestamp, m));
+
+                conectarFirebase();
+            } catch (err) {
+                console.error("Erro ao carregar mapa:", err);
+            }
+        }
+
+        inicializarMapa();
+
+        function desenharMarcadorNoMapa(id, m) {
+            if (!mapa) return;
+            const chaveMapa = id || m.timestamp;
+            if (marcadoresAtivosNoMapa[chaveMapa]) return;
+
+            const marcador = L.marker([m.lat, m.lng]).addTo(mapa);
+            marcadoresAtivosNoMapa[chaveMapa] = marcador;
+
+            let criadorEmail = m.criador || 'desconhecido@axabixo.com';
+            let botaoDeletarHTML = '';
+            
+            if (usuarioLogadoEmail === criadorEmail) {
+                botaoDeletarHTML = `<br><button onclick="window.deletarMarcador('${id}', '${criadorEmail}', ${m.timestamp || 0})" style="background-color: #d9534f; color: white; border: none; padding: 6px 12px; border-radius: 5px; cursor: pointer; margin-top: 8px; width: 100%;">🗑️ Remover meu marcador</button>`;
+            }
+
+            let perfilCriadorHtml = `<div style="margin-bottom: 6px; border-bottom: 1px solid #eee; padding-bottom: 5px;">Postado por: ${renderizarPerfilHtml(criadorEmail)}</div>`;
+
+            marcador.bindPopup(`
+                <div style="font-size: 13px; max-width: 220px; text-align: center;">
+                    <strong style="color: #ff5722; font-size: 14px;">🐶 AxaBixo</strong><br><br>
+                    ${perfilCriadorHtml}
+                    <img src="${m.imagemUrl}" onclick="window.abrirFotoAmpliada('${m.imagemUrl}')" style="width: 100%; height: 130px; object-fit: cover; border-radius: 8px; margin-bottom: 6px; cursor: pointer;" title="Clique para ampliar a foto"><br>
+                    <div style="text-align: left;">
+                        <b>Descrição:</b> ${m.descricao}<br>
+                        <b>📍 Endereço:</b> ${m.endereco}<br>
+                        <small style="color: #666;"><b>Data:</b> ${m.data}</small>
+                    </div>
+                    ${botaoDeletarHTML}
+                </div>
+            `);
+        }
+
+        window.deletarMarcador = async function(id, criador, timestamp) {
+            if (usuarioLogadoEmail !== criador) {
+                alert("Apenas o criador deste marcador pode removê-lo!");
+                return;
+            }
+
+            if (!confirm("Tem certeza que deseja remover este marcador?")) return;
+
+            if (db && id && !id.toString().startsWith('local_')) {
+                try {
+                    const { deleteDoc, doc } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
+                    await deleteDoc(doc(db, "marcadores", id));
+                } catch (e) {
+                    console.error("Erro ao deletar do Firebase", e);
+                }
+            }
+
+            let salvos = obterMarcadoresLocais();
+            if (timestamp) {
+                salvos = salvos.filter(m => m.timestamp !== timestamp);
+            } else {
+                salvos = salvos.filter(m => m.id !== id);
+            }
+            localStorage.setItem('axabixo_todos_marcadores', JSON.stringify(salvos));
+            alert("Marcador removido com sucesso!");
+            location.reload();
+        };
+
+        const acharLocalizacao = () => {
+            status.textContent = 'Buscando sua localização...';
+
+            const success = (position) => {
+                latitudeUsuario = position.coords.latitude;
+                longitudeUsuario = position.coords.longitude;
+
+                status.textContent = 'Sua localização encontrada!';
+                if (mapa) {
+                    mapa.setView([latitudeUsuario, longitudeUsuario], 16);
+
+                    L.circle([latitudeUsuario, longitudeUsuario], {
+                        color: '#2196F3',
+                        fillColor: '#2196F3',
+                        fillOpacity: 0.3,
+                        radius: 30
+                    }).addTo(mapa);
+                }
+
+                setTimeout(() => { status.textContent = ''; }, 4000);
+            };
+
+            const error = () => {
+                status.textContent = 'GPS desativado. Ative para postar!';
+                setTimeout(() => { status.textContent = ''; }, 5000);
+            };
+
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(success, error, {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                });
+            }
+        };
+
+        acharLocalizacao();
+
+        async function buscar
